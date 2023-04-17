@@ -1,0 +1,33 @@
+该部分内容为通过部署在k8s里的nginx反代先前部署到paas的应用(主要涉及deployment/svc/configmap)
+##步骤一：编写configmap的yaml文件，并创建configmap资源
+##编写defualt.conf文件，用于监听nginx的server，conf文件为default.conf
+
+##创建configmap资源，步骤如下：
+    ##创建一个名为nginx-config的configmap资源
+    kubectl create configmap nginx-config --from-file=./default.conf
+    ##查看nginx-config资源
+    kubectl get configmap nginx-config -o yaml
+
+  configMap是K8s中用于数据持久化和共享的资源，其本质就是一个键/值对的映射(键名必须是合法的DNS字段，由数字、字母、破折号、下划线以及圆点构成，值可以是短字面量，也可以是完整的配置文件)。一般包含多个映射条目，其映射条目可以是短字面量，也可以是文件和文件夹。
+
+  使用时需要注意：
+  1.pod在创建时,若有一个容器使用的configmap不存在则该容器会创建失败，其余的容器成功创建，当使用的configmap创建之后，失败的容器则会自动启动可通过设置configMapKeyRef.optional：true字段避免该情况
+  2.若configmap中环境变量条目的键名不合法，则在创建环境变量时不会将其作为环境变量去创建，会自动忽略错误键名的条目
+
+  编写index.html文件，用于检测nginx服务是否正常，文件内容：<h1>hello world! this is my k8s nginx</h1>
+ 
+
+##步骤二：部署svc
+##利用deployment资源类型去部署nodeport类型的service
+  deployment可以同时管理多个pod版本，是一种更高阶的资源，创建一个deployment时会创建一个ReplicaSet资源，并由创建的ReplicaSet去管理集群中的pod。
+  因此模式为deployment管理ReplicaSet，ReplicaSet管理Pod。由于deployment直接管理rs，且每一次的应用版本都会对应一个rs，因此deployment对于应用版本的升级和回滚操作非常简单方便
+
+  deployment有两种升级策略，分别是rollingpdate和recreate。且deployment的升级是由master处理的，不再是kubectl客户端执行，由kubernetes的控制器管理升级会使升级更加可靠
+    >1.rollingupdate是默认的升级策略，为滚动升级，即创建一个新的pod，删除一个旧的pod
+    >2.recreate会一次性地删除所有旧的pod，然后一次性的创建所有新pod
+
+  但是使用deployment时需要注意：
+    >若deployment中pod的模板引用了一个configMap资源，那么更改configmap资源不会触发升级操作，若想要修改应用程序的配置并触发更新的话，则应该创建一个新的configmap，并且修改pod模板引用新的configmap来触发滚动升级
+
+  yaml文件为nginx-dp-and-svc.yaml
+  
